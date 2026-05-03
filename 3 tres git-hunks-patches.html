@@ -1,0 +1,2171 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Git Hunks & Patches — Guía Completa</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400;700;800&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <style>
+    :root {
+      --bg: #0a0e1a;
+      --surface: #111827;
+      --surface2: #1a2233;
+      --border: #2a3550;
+      --accent: #00d9ff;
+      --accent2: #ff6b35;
+      --accent3: #7c3aed;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #fbbf24;
+      --text: #e2e8f0;
+      --muted: #64748b;
+      --code-bg: #0d1117;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box
+    }
+
+    html {
+      font-size: 16px
+    }
+
+    body {
+      font-family: 'Syne', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Grain overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 9999;
+      opacity: .4;
+    }
+
+    /* SLIDES CONTAINER */
+    #slides {
+      width: 100vw;
+      height: 100vh;
+      position: relative;
+      overflow: hidden
+    }
+
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 3rem 4rem;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .5s ease, transform .5s ease;
+      transform: translateX(60px);
+      overflow-y: auto;
+    }
+
+    .slide.active {
+      opacity: 1;
+      pointer-events: all;
+      transform: translateX(0)
+    }
+
+    .slide.exit {
+      opacity: 0;
+      transform: translateX(-60px)
+    }
+
+    /* HEADER */
+    .slide-header {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 2rem
+    }
+
+    .slide-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .75rem;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      padding: .2rem .6rem;
+      border-radius: 3px;
+      opacity: .7;
+    }
+
+    .slide-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .7rem;
+      background: var(--accent3);
+      color: white;
+      padding: .2rem .6rem;
+      border-radius: 3px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+
+    h1 {
+      font-size: 3.5rem;
+      font-weight: 800;
+      line-height: 1.05
+    }
+
+    h2 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      margin-bottom: 1.2rem
+    }
+
+    h3 {
+      font-size: 1.3rem;
+      font-weight: 700;
+      margin-bottom: .6rem
+    }
+
+    p {
+      line-height: 1.7;
+      color: #c5d0e0
+    }
+
+    .accent {
+      color: var(--accent)
+    }
+
+    .accent2 {
+      color: var(--accent2)
+    }
+
+    .accent3 {
+      color: var(--accent3)
+    }
+
+    .green {
+      color: var(--green)
+    }
+
+    .red {
+      color: var(--red)
+    }
+
+    .yellow {
+      color: var(--yellow)
+    }
+
+    /* CODE BLOCKS */
+    pre,
+    code {
+      font-family: 'JetBrains Mono', monospace
+    }
+
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.2rem 1.5rem;
+      font-size: .85rem;
+      line-height: 1.8;
+      overflow-x: auto;
+      position: relative;
+    }
+
+    pre .line-add {
+      color: var(--green)
+    }
+
+    pre .line-del {
+      color: var(--red)
+    }
+
+    pre .line-meta {
+      color: var(--accent);
+      font-weight: 600
+    }
+
+    pre .line-header {
+      color: var(--yellow)
+    }
+
+    pre .line-ctx {
+      color: #8899aa
+    }
+
+    pre .hl {
+      background: rgba(0, 217, 255, .08);
+      display: block;
+      margin: 0 -1.5rem;
+      padding: 0 1.5rem;
+      border-left: 3px solid var(--accent)
+    }
+
+    /* CARDS */
+    .cards {
+      display: grid;
+      gap: 1.2rem
+    }
+
+    .cards-2 {
+      grid-template-columns: 1fr 1fr
+    }
+
+    .cards-3 {
+      grid-template-columns: 1fr 1fr 1fr
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1.5rem;
+      transition: border-color .2s;
+    }
+
+    .card:hover {
+      border-color: var(--accent)
+    }
+
+    .card-icon {
+      font-size: 2rem;
+      margin-bottom: .8rem;
+      line-height: 1;
+      color: var(--accent)
+    }
+
+    .card h3 {
+      font-size: 1rem
+    }
+
+    .card p {
+      font-size: .88rem;
+      margin-top: .4rem
+    }
+
+    /* DIFF VISUALIZER */
+    .diff-vis {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .82rem;
+    }
+
+    .diff-vis-header {
+      background: var(--surface2);
+      padding: .7rem 1.2rem;
+      display: flex;
+      align-items: center;
+      gap: .8rem;
+      border-bottom: 1px solid var(--border);
+      font-size: .75rem;
+    }
+
+    .diff-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%
+    }
+
+    .diff-file {
+      color: var(--accent);
+      font-size: .8rem
+    }
+
+    .diff-line {
+      display: flex;
+      padding: .18rem 0;
+      transition: background .15s;
+      cursor: default;
+    }
+
+    .diff-line:hover {
+      background: rgba(255, 255, 255, .04)
+    }
+
+    .diff-line-num {
+      width: 3.5rem;
+      text-align: right;
+      padding: 0 .8rem;
+      color: var(--muted);
+      user-select: none;
+      flex-shrink: 0;
+      border-right: 1px solid var(--border);
+    }
+
+    .diff-line-content {
+      padding: 0 1rem;
+      white-space: pre;
+      flex: 1
+    }
+
+    .diff-add {
+      background: rgba(34, 197, 94, .08)
+    }
+
+    .diff-add .diff-line-num {
+      color: var(--green)
+    }
+
+    .diff-add .diff-line-content {
+      color: var(--green)
+    }
+
+    .diff-del {
+      background: rgba(239, 68, 68, .08)
+    }
+
+    .diff-del .diff-line-num {
+      color: var(--red)
+    }
+
+    .diff-del .diff-line-content {
+      color: var(--red)
+    }
+
+    .diff-hunk {
+      background: rgba(0, 217, 255, .06)
+    }
+
+    .diff-hunk .diff-line-num {
+      color: var(--accent)
+    }
+
+    .diff-hunk .diff-line-content {
+      color: var(--accent)
+    }
+
+    .diff-ctx .diff-line-content {
+      color: #6b7e99
+    }
+
+    /* HUNK ANATOMY */
+    .hunk-anatomy {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .82rem;
+    }
+
+    .hunk-part {
+      position: relative;
+      cursor: pointer;
+    }
+
+    .hunk-tooltip {
+      display: none;
+      position: absolute;
+      left: 100%;
+      top: 50%;
+      transform: translateY(-50%);
+      margin-left: 1rem;
+      z-index: 100;
+      background: var(--surface2);
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      padding: .8rem 1.2rem;
+      font-family: 'Syne', sans-serif;
+      font-size: .82rem;
+      width: 260px;
+      line-height: 1.6;
+      color: var(--text);
+      pointer-events: none;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, .6);
+    }
+
+    .hunk-part:hover .hunk-tooltip {
+      display: block
+    }
+
+    .hunk-part:hover {
+      background: rgba(0, 217, 255, .07) !important
+    }
+
+    /* INTERACTIVE PATCH BUILDER */
+    #patch-builder {
+      display: flex;
+      gap: 1.5rem;
+      align-items: flex-start
+    }
+
+    .pb-source {
+      flex: 1
+    }
+
+    .pb-output {
+      flex: 1
+    }
+
+    .pb-line {
+      display: flex;
+      align-items: center;
+      gap: .8rem;
+      padding: .5rem .8rem;
+      border-radius: 6px;
+      margin-bottom: .3rem;
+      cursor: pointer;
+      transition: background .15s;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .82rem;
+    }
+
+    .pb-line:hover {
+      background: rgba(255, 255, 255, .05)
+    }
+
+    .pb-line.selected-add {
+      background: rgba(34, 197, 94, .12);
+      border: 1px solid rgba(34, 197, 94, .3)
+    }
+
+    .pb-line.selected-del {
+      background: rgba(239, 68, 68, .12);
+      border: 1px solid rgba(239, 68, 68, .3)
+    }
+
+    .pb-badge {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: .7rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .pb-badge-add {
+      background: var(--green);
+      color: #000
+    }
+
+    .pb-badge-del {
+      background: var(--red);
+      color: #fff
+    }
+
+    .pb-badge-ctx {
+      background: var(--border);
+      color: var(--muted)
+    }
+
+    .pb-hint {
+      font-size: .78rem;
+      color: var(--muted);
+      margin-bottom: .8rem
+    }
+
+    /* FLOW DIAGRAM */
+    .flow {
+      display: flex;
+      align-items: center;
+      gap: .8rem;
+      flex-wrap: wrap;
+      margin: 1.5rem 0
+    }
+
+    .flow-box {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .7rem 1.2rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .82rem;
+      text-align: center;
+      transition: all .2s;
+    }
+
+    .flow-box:hover {
+      border-color: var(--accent);
+      color: var(--accent)
+    }
+
+    .flow-box.active-flow {
+      border-color: var(--accent2);
+      color: var(--accent2);
+      background: rgba(255, 107, 53, .07)
+    }
+
+    .flow-arrow {
+      color: var(--muted);
+      font-size: 1.2rem
+    }
+
+    /* PROGRESS BAR */
+    #progress {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: var(--border);
+      z-index: 1000;
+    }
+
+    #progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent3), var(--accent));
+      transition: width .4s ease;
+    }
+
+    /* NAV */
+    #nav {
+      position: fixed;
+      bottom: 2rem;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      z-index: 1000;
+    }
+
+    .nav-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: .7rem 1.5rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-family: 'Syne', sans-serif;
+      font-size: .85rem;
+      font-weight: 700;
+      transition: all .2s;
+      letter-spacing: .03em;
+    }
+
+    .nav-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent)
+    }
+
+    #slide-counter {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .8rem;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: .7rem 1.2rem;
+      border-radius: 8px;
+      min-width: 70px;
+      text-align: center;
+    }
+
+    /* TABLE OF CONTENTS */
+    .toc {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: .6rem;
+      margin-top: 1rem
+    }
+
+    .toc-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .9rem 1.2rem;
+      display: flex;
+      align-items: center;
+      gap: .8rem;
+      cursor: pointer;
+      transition: all .2s;
+    }
+
+    .toc-item:hover {
+      border-color: var(--accent);
+      transform: translateX(4px)
+    }
+
+    .toc-num {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .7rem;
+      color: var(--accent);
+      min-width: 2rem;
+    }
+
+    .toc-text {
+      font-size: .88rem
+    }
+
+    /* TABS */
+    .tabs {
+      display: flex;
+      gap: .5rem;
+      margin-bottom: 1rem
+    }
+
+    .tab {
+      padding: .5rem 1.2rem;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      cursor: pointer;
+      font-size: .82rem;
+      font-family: 'JetBrains Mono', monospace;
+      transition: all .2s;
+      color: var(--muted);
+    }
+
+    .tab.active-tab {
+      background: var(--accent);
+      color: #000;
+      border-color: var(--accent);
+      font-weight: 700
+    }
+
+    .tab-content {
+      display: none
+    }
+
+    .tab-content.active-tc {
+      display: block
+    }
+
+    /* COMMAND REFERENCE */
+    .cmd-list {
+      display: flex;
+      flex-direction: column;
+      gap: .5rem
+    }
+
+    .cmd-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .9rem 1.2rem;
+      transition: border-color .2s;
+    }
+
+    .cmd-item:hover {
+      border-color: var(--accent2)
+    }
+
+    .cmd-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .82rem;
+      color: var(--accent2);
+      min-width: 220px;
+      flex-shrink: 0;
+    }
+
+    .cmd-desc {
+      font-size: .85rem;
+      color: #9bb
+    }
+
+    /* CALLOUT */
+    .callout {
+      border-radius: 10px;
+      padding: 1rem 1.4rem;
+      margin: 1rem 0;
+      display: flex;
+      gap: .8rem;
+      align-items: flex-start;
+    }
+
+    .callout-info {
+      background: rgba(0, 217, 255, .08);
+      border: 1px solid rgba(0, 217, 255, .3)
+    }
+
+    .callout-warn {
+      background: rgba(251, 191, 36, .08);
+      border: 1px solid rgba(251, 191, 36, .3)
+    }
+
+    .callout-tip {
+      background: rgba(34, 197, 94, .08);
+      border: 1px solid rgba(34, 197, 94, .3)
+    }
+
+    .callout-icon {
+      font-size: 1.2rem;
+      flex-shrink: 0;
+      margin-top: 2px
+    }
+
+    .callout p {
+      font-size: .88rem;
+      margin: 0
+    }
+
+    /* QUIZ */
+    .quiz-q {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 1.2rem;
+      line-height: 1.5
+    }
+
+    .quiz-opts {
+      display: flex;
+      flex-direction: column;
+      gap: .6rem
+    }
+
+    .quiz-opt {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: .9rem 1.4rem;
+      cursor: pointer;
+      font-size: .9rem;
+      transition: all .2s;
+      display: flex;
+      align-items: center;
+      gap: .8rem;
+    }
+
+    .quiz-opt:hover {
+      border-color: var(--accent)
+    }
+
+    .quiz-opt.correct {
+      background: rgba(34, 197, 94, .15);
+      border-color: var(--green);
+      color: var(--green)
+    }
+
+    .quiz-opt.wrong {
+      background: rgba(239, 68, 68, .15);
+      border-color: var(--red);
+      color: var(--red)
+    }
+
+    .quiz-feedback {
+      margin-top: 1rem;
+      padding: 1rem;
+      border-radius: 8px;
+      font-size: .88rem;
+      display: none;
+    }
+
+    .quiz-feedback.show {
+      display: block
+    }
+
+    /* PIPE DIAGRAM */
+    .pipe-diagram {
+      display: flex;
+      flex-direction: column;
+      gap: .4rem;
+      margin: 1rem 0
+    }
+
+    .pipe-row {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      font-size: .82rem;
+      font-family: 'JetBrains Mono', monospace
+    }
+
+    .pipe-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: .4rem .8rem;
+      font-size: .8rem;
+      min-width: 120px;
+      text-align: center;
+    }
+
+    .pipe-arrow {
+      color: var(--accent);
+      font-size: 1rem
+    }
+
+    .pipe-note {
+      color: var(--muted);
+      font-size: .78rem;
+      margin-left: .5rem
+    }
+
+    /* STEP LIST */
+    .steps {
+      display: flex;
+      flex-direction: column;
+      gap: .8rem;
+      counter-reset: step
+    }
+
+    .step {
+      display: flex;
+      gap: 1.2rem;
+      align-items: flex-start;
+      counter-increment: step;
+    }
+
+    .step::before {
+      content: counter(step);
+      min-width: 2rem;
+      height: 2rem;
+      border-radius: 50%;
+      background: var(--accent3);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: .88rem;
+      flex-shrink: 0;
+      margin-top: .1rem;
+    }
+
+    .step-content h3 {
+      font-size: .95rem;
+      margin-bottom: .3rem
+    }
+
+    .step-content p {
+      font-size: .85rem;
+      margin: 0
+    }
+
+    /* highlight on hover for anatomy */
+    .anatomy-label {
+      display: inline-flex;
+      align-items: center;
+      gap: .5rem;
+      font-size: .72rem;
+      color: var(--accent);
+      border: 1px dashed rgba(0, 217, 255, .3);
+      border-radius: 4px;
+      padding: .1rem .5rem;
+      margin-left: .5rem;
+      cursor: default;
+    }
+
+    /* scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--accent3)
+    }
+
+    /* Animations */
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px)
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0)
+      }
+    }
+
+    .fade-in {
+      animation: fadeIn .4s ease both
+    }
+
+    .fade-in-1 {
+      animation-delay: .1s
+    }
+
+    .fade-in-2 {
+      animation-delay: .2s
+    }
+
+    .fade-in-3 {
+      animation-delay: .3s
+    }
+
+    .fade-in-4 {
+      animation-delay: .4s
+    }
+
+    .fade-in-5 {
+      animation-delay: .5s
+    }
+
+    .fade-in-6 {
+      animation-delay: .6s
+    }
+
+    @keyframes pulse-border {
+
+      0%,
+      100% {
+        border-color: var(--border)
+      }
+
+      50% {
+        border-color: var(--accent)
+      }
+    }
+
+    .pulse {
+      animation: pulse-border 2s ease-in-out infinite
+    }
+
+    .identity-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+      margin: 1.2rem 0 1rem;
+      max-width: 980px;
+    }
+
+    .identity-card {
+      background: linear-gradient(180deg, rgba(17, 24, 39, .92), rgba(26, 34, 51, .92));
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1rem 1.1rem;
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .22);
+    }
+
+    .identity-media {
+      width: 88px;
+      height: 88px;
+      border-radius: 20px;
+      overflow: hidden;
+      flex-shrink: 0;
+      background: #fff;
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .identity-media img {
+      width: 100%;
+      height: 100%;
+      display: block
+    }
+
+    .identity-media.logo img {
+      object-fit: contain;
+      padding: 10px
+    }
+
+    .identity-media.photo {
+      border-radius: 50%
+    }
+
+    .identity-media.photo img {
+      object-fit: cover
+    }
+
+    .identity-copy h3 {
+      margin-bottom: .25rem;
+      font-size: 1rem
+    }
+
+    .identity-copy p {
+      font-size: .82rem;
+      color: #9fb0c8;
+      line-height: 1.65
+    }
+
+    .identity-link {
+      display: inline-flex;
+      align-items: center;
+      gap: .45rem;
+      margin-top: .65rem;
+      text-decoration: none;
+      color: var(--accent);
+      border: 1px solid rgba(0, 217, 255, .28);
+      background: rgba(0, 217, 255, .08);
+      border-radius: 999px;
+      padding: .42rem .8rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .72rem;
+    }
+
+    .identity-link:hover {
+      border-color: var(--accent);
+      background: rgba(0, 217, 255, .14)
+    }
+
+    .thanks-wrap {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+
+    .thanks-panel {
+      margin-top: 1.3rem;
+      background: linear-gradient(180deg, rgba(17, 24, 39, .92), rgba(26, 34, 51, .92));
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.4rem;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, .22);
+    }
+
+    .thanks-note {
+      max-width: 860px;
+      font-size: 1rem;
+      line-height: 1.8;
+      color: #a9bad1;
+    }
+
+    @media (max-width:900px) {
+      .identity-grid {
+        grid-template-columns: 1fr
+      }
+
+      .identity-card {
+        align-items: flex-start
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="slides">
+
+    <!-- ===== SLIDE 0: COVER ===== -->
+    <div class="slide active" id="s0">
+      <div style="flex:1;display:flex;flex-direction:column;justify-content:center">
+        <div class="fade-in" style="margin-bottom:1rem">
+          <span style="font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--accent);opacity:.7">$ git diff
+            --help</span>
+        </div>
+        <h1 class="fade-in fade-in-1"
+          style="font-size:4rem;background:linear-gradient(135deg,#fff 30%,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">
+          Git Hunks<br>& Patches
+        </h1>
+        <p class="fade-in fade-in-2" style="font-size:1.15rem;margin:1.2rem 0;max-width:550px;color:#8899bb">
+          Domina el control quirúrgico de cambios en tu repositorio: desde entender un hunk hasta aplicar, revertir y
+          generar patches profesionales.
+        </p>
+        <div class="flow fade-in fade-in-3">
+          <div class="flow-box">Básico</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-box">Intermedio</div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-box">Avanzado</div>
+        </div>
+        <div class="identity-grid fade-in fade-in-4">
+          <div class="identity-card">
+            <div class="identity-media photo"><img id="cover-teacher-photo" src="https://avatars.githubusercontent.com/u/271381047?v=4" alt="Foto de Marco Mayta">
+            </div>
+            <div class="identity-copy">
+              <h3 id="cover-teacher-name">Marco Mayta</h3>
+              <p id="cover-teacher-desc">Docente e investigador en IA y ciencia de datos, Ingeniero Estadístico e
+                Informático, candidato a MBA en IA & Big Data (USP), orientado a formación práctica basada en proyectos
+                y problemas reales.</p>
+              <a class="identity-link" id="cover-teacher-link" href="https://www.linkedin.com/in/marco-mayta-835781170/"
+                target="_blank" rel="noopener noreferrer">LinkedIn personal</a>
+            </div>
+          </div>
+          <div class="identity-card">
+            <div class="identity-media logo"><img id="cover-inst-logo" src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAOEAAADgCAMAAADCMfHtAAAAwFBMVEX////wRkbyRUbsQjztiYruf3ryP0DtNzj9/vrxPD3u0M3upaLyRUjyuLnyQj/sOzjraGj5///qWVjy5eX//f/uR0b0REnwR0TpSkb4//v8/f/tOTDzw8PrOj3rX2T79PLuxcj0NzDskpXofIHysbjuUVXtWVThl5ToSD/1Ojf0tbXuiYr1r7DfZGnpPEjmY2ry8+jxeHr47O3gW1zxn6flV1zqbG3subPxur7sl5PkTj/zxb3syMXnODnyNkHupKKobK8PAAAFVUlEQVR4nO2djVPbNhyGFQdmh7kxav1FSPBCymZnMDY6Bqwt/P//1SSHxF+STdYgyb73uWvveue2fu73ynqdOxRCAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEyFEqf4w0zffbwbPlMsMzhHn36++vXjjqvfdN/QofHJ2k7D6Y7sSPcdHRifrhfWqMAa/677lg4MXdvTUcVwaDNc2+NgwIZ5RCN3wIZ0nf00qjIww/ViPBquIfXptT0N3B8wpP473t+Pw9agXR9gtyFNPhUkqu71/0GvmxHtNkxu/theGdkn1HfaLtaKT3hE9zZMbrIp6wfWiP9mtCFbgwuBXoeh79xOSpfaJ8RYQcIfMnsb0uTCG/XFcJ2NRRFtN0xux1E/DHlELbGf3NBhE6y1A3MNBU2m25AJ1nNtruH1RLRNdBgmF2lUu9RMQ0mT6TLkE6wLSg19/slP/sEIrX0+ogIuKB+g1DC5FeRaOkNKkvkvnK/zb5/e10fwn78Im0yHYXI/bkywLaV/3i+X2ZL9yuyH9/VpQCVNpt2wvk20Gfp5pMfBhuj5UYVWgbhsdxj6jW2izXA2Y9XOe92MItf7oMZse6/0r/aIigz5RMSXilPKrp9E25yoNpyR1f6GkojKDOndqWfF20Kh2pCQY/lWLzRkTeZe+lcahv7Mp3dfvFJfMt9QHlHhDGdMcFKeuPmGyX2jybQZkuSLF8X9maEzuxM0GZlhvk3ce/n7cV8Mz8jfrZtLbYasydxMav++4YaE/jxpu7Rq6LAmM4niXhk65M2Gm4iOraD23jkcQ9Zk7m4nzddqww3p2w35BIsmM0TDfKOPezfDPVLq/CN+ZYGhZsM9Uuqciv9hww33meGp+ANmGMLwnQ33Woe9NBz+DIdviJT23xAzhKH5hkgpDM03REphCEP9hliHMDTfECntvyFmCEPzDZFSGJpviJTCEIb6DbEO+2+IGcLQfEOktP+GmCEMYajfEOsQhuYbIqUwNN8QKe2/IWbYbWi5C9U/ra7YMEhtxT+trjyl2ZPqYyNUztByg+WT8oMxlBqm9tOZYj+1hsH5JVV/opvKdWhfns3UH1l3wBm67vnJ7gcs64aRFdhPOk6nOaAhe4yskt0yqxu68fmlo+XQwQOm1F4RuptSY4b8IaPlVMVDzdAdecdO6czoimEU8ojOqJZDpQ80wzDNVpUQVgzDf9lDRte5mAeaYZCtaCWEFcP8IaPr4M8Ow2AUut7uLGiZYRjZK8cnRDhDHtFLqu/Q8y7DII7s+fYZL0mpm9qrelcpGWppMgUdhmE8XTzQ3TYuNrSWq8bps4VhcP6kockUtBkG/Aliz4mznaHE0Fvxh2RVwrnI7FdYk1HvVdBmGIdB9Fx+YRWlNHC9RkT5pSdf5xu+6dnod7QZhun0+2dSun3BDHmTESn49PUIQarxIZPTZuhGi4fKAhMYRvYR3wgaig6hM3+D42hoowUywyAOXSsXLBeVuiFrMitHPCOfOBsUiUiRztBK00UloqS5DnmT0dZV3orM0OLbRH0PaMyw3mRMRGjImkwYfJ+TM7+6gqqGYZTVm4yJSAzj+Pmx+XyopNRNsyOdXeWtCA15k/kgfB9/2RlarnibMI6mYd5kFjyijYsd8lKc1zY+ouZHlIgMY5c1mbnk8rvS1wTo3ebeTNOQN5lHIl5hFaezvhqyJjM3/Ysq9qFquGkyTHBAX9NVm6GVRgtZRHtK1ZA3mUFFlFQMY9ZkIkGT6TnlGQbiJtNzjifWFvamkD9kBsbR1cfS9wAOLqIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAYLD8B5GJm2DKYO+0AAAAAElFTkSuQmCC"
+                alt="Logo del Instituto de Analítica y Negocios"></div>
+            <div class="identity-copy">
+              <h3 id="cover-inst-name">Instituto de Analítica y Negocios</h3>
+              <p id="cover-inst-desc">Formación técnica y profesional. Transformamos datos en inteligencia empresarial
+                avanzada mediante Business Intelligence y Forecasting.</p>
+              <a class="identity-link" id="cover-inst-link"
+                href="https://www.linkedin.com/company/instituto-de-anal%C3%ADtica-y-negocios/" target="_blank"
+                rel="noopener noreferrer">LinkedIn institución</a>
+            </div>
+          </div>
+        </div>
+        <div class="toc fade-in fade-in-5">
+          <div class="toc-item" onclick="goTo(1)"><span class="toc-num">01</span><span class="toc-text">¿Qué es un
+              Hunk?</span></div>
+          <div class="toc-item" onclick="goTo(2)"><span class="toc-num">02</span><span class="toc-text">Anatomía del
+              Diff</span></div>
+          <div class="toc-item" onclick="goTo(3)"><span class="toc-num">03</span><span class="toc-text">Comandos
+              Esenciales</span></div>
+          <div class="toc-item" onclick="goTo(4)"><span class="toc-num">04</span><span class="toc-text">Staging
+              Interactivo</span></div>
+          <div class="toc-item" onclick="goTo(5)"><span class="toc-num">05</span><span class="toc-text">Crear
+              Patches</span></div>
+          <div class="toc-item" onclick="goTo(6)"><span class="toc-num">06</span><span class="toc-text">Aplicar
+              Patches</span></div>
+          <div class="toc-item" onclick="goTo(7)"><span class="toc-num">07</span><span class="toc-text">Técnicas
+              Avanzadas</span></div>
+          <div class="toc-item" onclick="goTo(8)"><span class="toc-num">08</span><span class="toc-text">Quiz
+              Final</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 1: QUÉ ES UN HUNK ===== -->
+    <div class="slide" id="s1">
+      <div class="slide-header">
+        <span class="slide-num">01</span>
+        <span class="slide-tag">fundamentos</span>
+      </div>
+      <h2 class="fade-in">¿Qué es un <span class="accent">Hunk</span>?</h2>
+      <div class="cards cards-2 fade-in fade-in-1" style="margin-bottom:1.2rem">
+        <div class="card">
+          <div class="card-icon"><i class="bi bi-box-seam"></i></div>
+          <h3>Definición</h3>
+          <p>Un <strong style="color:var(--accent)">hunk</strong> es un bloque contiguo de cambios dentro de un diff.
+            Cada hunk representa una región del archivo donde hubo modificaciones, con <em>líneas de contexto</em>
+            alrededor para ubicar el cambio.</p>
+        </div>
+        <div class="card">
+          <div class="card-icon"><i class="bi bi-scissors"></i></div>
+          <h3>¿Por qué importa?</h3>
+          <p>Los hunks te permiten hacer <strong style="color:var(--accent2)">commits quirúrgicos</strong>: agregar al
+            stage solo partes específicas de un archivo, no el archivo completo.</p>
+        </div>
+      </div>
+
+      <p class="fade-in fade-in-2" style="margin-bottom:.8rem;font-size:.9rem;color:var(--muted)">Ejemplo: un archivo
+        con <span class="accent">2 hunks</span> independientes</p>
+      <div class="diff-vis fade-in fade-in-2">
+        <div class="diff-vis-header">
+          <div class="diff-dot" style="background:#ff5f56"></div>
+          <div class="diff-dot" style="background:#ffbd2e"></div>
+          <div class="diff-dot" style="background:#27c93f"></div>
+          <span class="diff-file">app.py</span>
+          <span style="color:var(--muted);margin-left:auto">2 hunks detectados</span>
+        </div>
+        <!-- Hunk 1 -->
+        <div class="diff-line diff-hunk">
+          <div class="diff-line-num">···</div>
+          <div class="diff-line-content">@@ -3,7 +3,8 @@ def setup():</div>
+        </div>
+        <div class="diff-line diff-ctx">
+          <div class="diff-line-num">3</div>
+          <div class="diff-line-content"> import os</div>
+        </div>
+        <div class="diff-line diff-ctx">
+          <div class="diff-line-num">4</div>
+          <div class="diff-line-content"> import sys</div>
+        </div>
+        <div class="diff-line diff-del">
+          <div class="diff-line-num">5</div>
+          <div class="diff-line-content">-DEBUG = False</div>
+        </div>
+        <div class="diff-line diff-add">
+          <div class="diff-line-num">5</div>
+          <div class="diff-line-content">+DEBUG = True</div>
+        </div>
+        <div class="diff-line diff-add">
+          <div class="diff-line-num">6</div>
+          <div class="diff-line-content">+LOG_LEVEL = "verbose"</div>
+        </div>
+        <div class="diff-line diff-ctx">
+          <div class="diff-line-num">7</div>
+          <div class="diff-line-content"> app = Flask(__name__)</div>
+        </div>
+        <div style="border-top:2px dashed rgba(0,217,255,.2);margin:.2rem 0;position:relative">
+          <span
+            style="position:absolute;right:1rem;top:50%;transform:translateY(-50%);font-size:.7rem;color:var(--accent);font-family:'JetBrains Mono',monospace;background:var(--code-bg);padding:0 .4rem">—
+            hunk boundary —</span>
+        </div>
+        <!-- Hunk 2 -->
+        <div class="diff-line diff-hunk">
+          <div class="diff-line-num">···</div>
+          <div class="diff-line-content">@@ -42,6 +43,9 @@ def process():</div>
+        </div>
+        <div class="diff-line diff-ctx">
+          <div class="diff-line-num">42</div>
+          <div class="diff-line-content"> results = []</div>
+        </div>
+        <div class="diff-line diff-del">
+          <div class="diff-line-num">43</div>
+          <div class="diff-line-content">- for item in data:</div>
+        </div>
+        <div class="diff-line diff-add">
+          <div class="diff-line-num">43</div>
+          <div class="diff-line-content">+ for item in sorted(data):</div>
+        </div>
+        <div class="diff-line diff-add">
+          <div class="diff-line-num">44</div>
+          <div class="diff-line-content">+ if item.valid:</div>
+        </div>
+        <div class="diff-line diff-ctx">
+          <div class="diff-line-num">45</div>
+          <div class="diff-line-content"> results.append(item)</div>
+        </div>
+      </div>
+
+      <div class="callout callout-info fade-in fade-in-3" style="margin-top:.8rem">
+        <p>Los hunks están separados porque sus cambios están en <strong>zonas distintas del archivo</strong> (líneas
+          3-7 vs líneas 42-45). Git los detecta automáticamente.</p>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 2: ANATOMÍA ===== -->
+    <div class="slide" id="s2">
+      <div class="slide-header">
+        <span class="slide-num">02</span>
+        <span class="slide-tag">anatomía</span>
+      </div>
+      <h2 class="fade-in">Anatomía del <span class="accent">Diff</span></h2>
+      <p class="fade-in fade-in-1" style="margin-bottom:1.2rem;font-size:.9rem">
+        Pasa el cursor sobre cada parte para ver su explicación ↓
+      </p>
+      <div class="hunk-anatomy fade-in fade-in-1">
+        <div class="diff-vis-header">
+          <div class="diff-dot" style="background:#ff5f56"></div>
+          <div class="diff-dot" style="background:#ffbd2e"></div>
+          <div class="diff-dot" style="background:#27c93f"></div>
+          <span class="diff-file">server.js — diff completo anotado</span>
+        </div>
+        <!-- Línea de encabezado de diff -->
+        <div class="hunk-part" style="background:rgba(124,58,237,.08)">
+          <div class="diff-line" style="padding:.25rem 0">
+            <div class="diff-line-num" style="color:var(--accent3)">···</div>
+            <div class="diff-line-content" style="color:var(--accent3);font-weight:700">diff --git a/server.js
+              b/server.js</div>
+          </div>
+          <div class="hunk-tooltip" style="border-color:var(--accent3)">
+            <strong style="color:var(--accent3)">Cabecera del diff</strong><br><br>
+            Indica los dos archivos comparados: <code>a/</code> = versión anterior, <code>b/</code> = versión nueva. En
+            un mismo repo ambos apuntan al mismo archivo.
+          </div>
+        </div>
+        <div class="hunk-part" style="background:rgba(124,58,237,.05)">
+          <div class="diff-line" style="padding:.25rem 0">
+            <div class="diff-line-num" style="color:var(--accent3)">···</div>
+            <div class="diff-line-content" style="color:var(--accent3)">index 4a3f1b..9c82e0 100644</div>
+          </div>
+          <div class="hunk-tooltip" style="border-color:var(--accent3)">
+            <strong style="color:var(--accent3)">Línea index</strong><br><br>
+            Muestra los hashes SHA1 cortos de los blobs de git y el modo del archivo (100644 = archivo normal, 100755 =
+            ejecutable).
+          </div>
+        </div>
+        <div class="hunk-part">
+          <div class="diff-line" style="padding:.25rem 0;background:rgba(239,68,68,.07)">
+            <div class="diff-line-num" style="color:var(--red)">···</div>
+            <div class="diff-line-content" style="color:var(--red)">--- a/server.js</div>
+          </div>
+          <div class="hunk-tooltip" style="border-color:var(--red)">
+            <strong style="color:var(--red)">--- (versión anterior)</strong><br><br>
+            Archivo original. Las líneas precedidas por <code>-</code> provienen de esta versión y serán eliminadas.
+          </div>
+        </div>
+        <div class="hunk-part">
+          <div class="diff-line" style="padding:.25rem 0;background:rgba(34,197,94,.07)">
+            <div class="diff-line-num" style="color:var(--green)">···</div>
+            <div class="diff-line-content" style="color:var(--green)">+++ b/server.js</div>
+          </div>
+          <div class="hunk-tooltip" style="border-color:var(--green)">
+            <strong style="color:var(--green)">+++ (versión nueva)</strong><br><br>
+            Archivo modificado. Las líneas con <code>+</code> pertenecen a esta versión y serán añadidas.
+          </div>
+        </div>
+        <div class="hunk-part">
+          <div class="diff-line diff-hunk" style="padding:.25rem 0">
+            <div class="diff-line-num">···</div>
+            <div class="diff-line-content">@@ -12,7 +12,9 @@ function startServer() {</div>
+          </div>
+          <div class="hunk-tooltip">
+            <strong style="color:var(--accent)">Hunk Header (@@ ... @@)</strong><br><br>
+            Formato: <code>@@ -L,S +L,S @@</code><br>
+            <code>-12,7</code> → desde línea 12, 7 líneas del original<br>
+            <code>+12,9</code> → desde línea 12, 9 líneas del resultado<br>
+            El texto después del <code>@@</code> final es el contexto funcional (nombre de función).
+          </div>
+        </div>
+        <div class="hunk-part">
+          <div class="diff-line diff-ctx" style="padding:.25rem 0">
+            <div class="diff-line-num">12</div>
+            <div class="diff-line-content"> const port = process.env.PORT || 3000;</div>
+          </div>
+          <div class="hunk-tooltip">
+            <strong style="color:#8899aa">Línea de contexto</strong><br><br>
+            Líneas sin <code>+</code> ni <code>-</code>, presentes en ambas versiones. Proveen contexto para localizar
+            el cambio. Por defecto git muestra <strong>3 líneas</strong> de contexto arriba y abajo (configurable con
+            <code>-U n</code>).
+          </div>
+        </div>
+        <div class="hunk-part">
+          <div class="diff-line diff-del" style="padding:.25rem 0">
+            <div class="diff-line-num">13</div>
+            <div class="diff-line-content">-app.listen(port);</div>
+          </div>
+          <div class="hunk-tooltip" style="border-color:var(--red)">
+            <strong style="color:var(--red)">Línea eliminada ( - )</strong><br><br>
+            Esta línea existe en el original pero NO en el resultado. El prefijo <code>-</code> la distingue. NO
+            confundir con comentario; en diff es un marcador de eliminación.
+          </div>
+        </div>
+        <div class="hunk-part">
+          <div class="diff-line diff-add" style="padding:.25rem 0">
+            <div class="diff-line-num">13</div>
+            <div class="diff-line-content">+app.listen(port, () => {</div>
+          </div>
+          <div class="hunk-part">
+            <div class="diff-line diff-add" style="padding:.25rem 0">
+              <div class="diff-line-num">14</div>
+              <div class="diff-line-content">+ console.log(`Server on port ${port}`);</div>
+            </div>
+          </div>
+          <div class="diff-line diff-add" style="padding:.25rem 0">
+            <div class="diff-line-num">15</div>
+            <div class="diff-line-content">+});</div>
+          </div>
+          <div class="hunk-tooltip" style="border-color:var(--green)">
+            <strong style="color:var(--green)">Líneas añadidas ( + )</strong><br><br>
+            Estas 3 líneas existen en el resultado pero NO en el original. El número de líneas añadidas menos eliminadas
+            explica el cambio en el hunk header: <code>+12,9</code> vs <code>-12,7</code> (+2 líneas netas).
+          </div>
+        </div>
+        <div class="diff-line diff-ctx" style="padding:.25rem 0">
+          <div class="diff-line-num">16</div>
+          <div class="diff-line-content"> module.exports = app;</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 3: COMANDOS ===== -->
+    <div class="slide" id="s3">
+      <div class="slide-header">
+        <span class="slide-num">03</span>
+        <span class="slide-tag">comandos</span>
+      </div>
+      <h2 class="fade-in">Comandos <span class="accent2">Esenciales</span></h2>
+
+      <div class="tabs fade-in fade-in-1" id="cmd-tabs">
+        <div class="tab active-tab" onclick="switchTab('diff')">git diff</div>
+        <div class="tab" onclick="switchTab('show')">git show</div>
+        <div class="tab" onclick="switchTab('log')">git log -p</div>
+        <div class="tab" onclick="switchTab('apply')">git apply</div>
+      </div>
+
+      <div id="tc-diff" class="tab-content active-tc fade-in fade-in-2">
+        <div class="cmd-list">
+          <div class="cmd-item"><span class="cmd-code">git diff</span><span class="cmd-desc">Working tree vs staging
+              area (cambios NO staged)</span></div>
+          <div class="cmd-item"><span class="cmd-code">git diff --staged</span><span class="cmd-desc">Staging area vs
+              último commit (cambios staged)</span></div>
+          <div class="cmd-item"><span class="cmd-code">git diff HEAD</span><span class="cmd-desc">Working tree vs último
+              commit (todo junto)</span></div>
+          <div class="cmd-item"><span class="cmd-code">git diff &lt;commit1&gt; &lt;commit2&gt;</span><span
+              class="cmd-desc">Diferencia entre dos commits específicos</span></div>
+          <div class="cmd-item"><span class="cmd-code">git diff -U5</span><span class="cmd-desc">Mostrar 5 líneas de
+              contexto en vez de 3</span></div>
+          <div class="cmd-item"><span class="cmd-code">git diff --word-diff</span><span class="cmd-desc">Diff a nivel de
+              palabras (no líneas)</span></div>
+          <div class="cmd-item"><span class="cmd-code">git diff --stat</span><span class="cmd-desc">Resumen: archivos
+              cambiados, inserciones, borrados</span></div>
+          <div class="cmd-item"><span class="cmd-code">git diff -- path/to/file</span><span class="cmd-desc">Filtrar
+              diff solo para un archivo/directorio</span></div>
+        </div>
+      </div>
+      <div id="tc-show" class="tab-content fade-in">
+        <div class="cmd-list">
+          <div class="cmd-item"><span class="cmd-code">git show &lt;commit&gt;</span><span class="cmd-desc">Muestra el
+              diff completo de un commit específico</span></div>
+          <div class="cmd-item"><span class="cmd-code">git show &lt;commit&gt;:file</span><span class="cmd-desc">Muestra
+              el contenido de un archivo en ese commit</span></div>
+          <div class="cmd-item"><span class="cmd-code">git show --stat &lt;commit&gt;</span><span class="cmd-desc">Solo
+              el resumen de cambios del commit</span></div>
+          <div class="cmd-item"><span class="cmd-code">git show HEAD~3</span><span class="cmd-desc">Tres commits hacia
+              atrás desde HEAD</span></div>
+        </div>
+      </div>
+      <div id="tc-log" class="tab-content">
+        <div class="cmd-list">
+          <div class="cmd-item"><span class="cmd-code">git log -p</span><span class="cmd-desc">Log con diff completo de
+              cada commit</span></div>
+          <div class="cmd-item"><span class="cmd-code">git log -p -3</span><span class="cmd-desc">Últimos 3 commits con
+              diff</span></div>
+          <div class="cmd-item"><span class="cmd-code">git log -p --follow -- file</span><span class="cmd-desc">Historia
+              de un archivo incluso tras renombrarlo</span></div>
+          <div class="cmd-item"><span class="cmd-code">git log -S "texto"</span><span class="cmd-desc">Busca commits que
+              añaden/eliminan "texto" (pickaxe)</span></div>
+          <div class="cmd-item"><span class="cmd-code">git log -G "regex"</span><span class="cmd-desc">Como -S pero con
+              expresión regular</span></div>
+        </div>
+      </div>
+      <div id="tc-apply" class="tab-content">
+        <div class="cmd-list">
+          <div class="cmd-item"><span class="cmd-code">git apply archivo.patch</span><span class="cmd-desc">Aplica un
+              patch al working tree (sin commit)</span></div>
+          <div class="cmd-item"><span class="cmd-code">git apply --check</span><span class="cmd-desc">Verifica si el
+              patch aplica limpiamente (dry-run)</span></div>
+          <div class="cmd-item"><span class="cmd-code">git apply --index</span><span class="cmd-desc">Aplica y agrega
+              cambios al staging area</span></div>
+          <div class="cmd-item"><span class="cmd-code">git apply --reverse</span><span class="cmd-desc">Aplica el patch
+              al revés (des-aplica)</span></div>
+          <div class="cmd-item"><span class="cmd-code">git apply --reject</span><span class="cmd-desc">Aplica todo lo
+              posible, guarda conflictos en .rej</span></div>
+          <div class="cmd-item"><span class="cmd-code">git apply -3</span><span class="cmd-desc">Intenta three-way merge
+              si el patch no aplica limpio</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 4: STAGING INTERACTIVO ===== -->
+    <div class="slide" id="s4">
+      <div class="slide-header">
+        <span class="slide-num">04</span>
+        <span class="slide-tag">interactivo</span>
+      </div>
+      <h2 class="fade-in">Staging <span class="accent">por Hunks</span></h2>
+      <p class="fade-in fade-in-1" style="margin-bottom:1rem;font-size:.9rem">
+        <code
+          style="background:var(--code-bg);padding:.2rem .5rem;border-radius:4px;color:var(--accent)">git add -p</code>
+        te pregunta por cada hunk: <strong>haz clic</strong> en las líneas de abajo para simular cuáles agregarías al
+        stage.
+      </p>
+      <div id="patch-builder" class="fade-in fade-in-2">
+        <div class="pb-source">
+          <p class="pb-hint">Archivo modificado — clic para toggle stage:</p>
+          <div class="pb-line" data-type="hunk1" onclick="toggleHunk(0)">
+            <div class="pb-badge pb-badge-ctx">≡</div>
+            <span style="color:var(--accent);font-size:.75rem">@@ -1,5 +1,6 @@</span>
+          </div>
+          <div class="pb-line" data-type="ctx">
+            <div class="pb-badge pb-badge-ctx">·</div><span style="color:#6b7e99"> const app = express();</span>
+          </div>
+          <div class="pb-line selected-del" data-type="del" id="pb0" onclick="toggleLine(0)">
+            <div class="pb-badge pb-badge-del">−</div>
+            <span>-const PORT = 3000;</span>
+          </div>
+          <div class="pb-line selected-add" data-type="add" id="pb1" onclick="toggleLine(1)">
+            <div class="pb-badge pb-badge-add">+</div>
+            <span>+const PORT = process.env.PORT || 3000;</span>
+          </div>
+          <div class="pb-line selected-add" data-type="add" id="pb2" onclick="toggleLine(2)">
+            <div class="pb-badge pb-badge-add">+</div>
+            <span>+const HOST = process.env.HOST || 'localhost';</span>
+          </div>
+          <div class="pb-line" data-type="ctx">
+            <div class="pb-badge pb-badge-ctx">·</div><span style="color:#6b7e99"> app.use(cors());</span>
+          </div>
+          <div style="height:1rem"></div>
+          <div class="pb-line" data-type="hunk2">
+            <div class="pb-badge pb-badge-ctx">≡</div>
+            <span style="color:var(--accent);font-size:.75rem">@@ -20,4 +21,7 @@</span>
+          </div>
+          <div class="pb-line" data-type="ctx">
+            <div class="pb-badge pb-badge-ctx">·</div><span style="color:#6b7e99"> async function start() {</span>
+          </div>
+          <div class="pb-line selected-del" data-type="del" id="pb3" onclick="toggleLine(3)">
+            <div class="pb-badge pb-badge-del">−</div>
+            <span>- console.log('started');</span>
+          </div>
+          <div class="pb-line selected-add" data-type="add" id="pb4" onclick="toggleLine(4)">
+            <div class="pb-badge pb-badge-add">+</div>
+            <span>+ logger.info(`Server at ${HOST}:${PORT}`);</span>
+          </div>
+          <div class="pb-line selected-add" data-type="add" id="pb5" onclick="toggleLine(5)">
+            <div class="pb-badge pb-badge-add">+</div>
+            <span>+ metrics.track('server_start');</span>
+          </div>
+        </div>
+        <div class="pb-output">
+          <p class="pb-hint">Preview del commit (líneas staged):</p>
+          <pre id="pb-preview" style="font-size:.78rem;min-height:180px;background:var(--code-bg)"></pre>
+          <div style="margin-top:1rem;display:flex;gap:.8rem">
+            <button onclick="stageAll()"
+              style="background:var(--green);color:#000;border:none;padding:.5rem 1.2rem;border-radius:6px;font-family:'Syne',sans-serif;font-weight:700;cursor:pointer;font-size:.85rem">Stage
+              All</button>
+            <button onclick="stageNone()"
+              style="background:var(--border);color:var(--text);border:none;padding:.5rem 1.2rem;border-radius:6px;font-family:'Syne',sans-serif;font-weight:700;cursor:pointer;font-size:.85rem">Clear</button>
+          </div>
+          <div class="callout callout-tip" style="margin-top:.8rem">
+            <p>En la terminal real <code>git add -p</code> pregunta: <code>y</code>=yes <code>n</code>=no
+              <code>s</code>=split <code>e</code>=edit <code>q</code>=quit</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 5: CREAR PATCHES ===== -->
+    <div class="slide" id="s5">
+      <div class="slide-header">
+        <span class="slide-num">05</span>
+        <span class="slide-tag">patches</span>
+      </div>
+      <h2 class="fade-in">Crear <span class="accent">Patches</span></h2>
+
+      <div class="cards cards-2 fade-in fade-in-1">
+        <div>
+          <h3 style="margin-bottom:.8rem;color:var(--accent2)">Método 1: git diff → archivo</h3>
+          <pre><span class="line-meta"># Cambios no staged:</span>
+<span class="line-add">git diff > mis-cambios.patch</span>
+
+<span class="line-meta"># Cambios staged:</span>
+<span class="line-add">git diff --staged > staged.patch</span>
+
+<span class="line-meta"># Entre commits:</span>
+<span class="line-add">git diff HEAD~3 HEAD > feature.patch</span>
+
+<span class="line-meta"># Solo un archivo:</span>
+<span class="line-add">git diff HEAD -- app.py > app.patch</span></pre>
+        </div>
+        <div>
+          <h3 style="margin-bottom:.8rem;color:var(--accent2)">Método 2: git format-patch</h3>
+          <pre><span class="line-meta"># Último commit como patch:</span>
+<span class="line-add">git format-patch -1 HEAD</span>
+
+<span class="line-meta"># Últimos 3 commits:</span>
+<span class="line-add">git format-patch -3</span>
+
+<span class="line-meta"># Rango de commits:</span>
+<span class="line-add">git format-patch main..feature</span>
+
+<span class="line-meta"># Con directorio de salida:</span>
+<span class="line-add">git format-patch -3 -o ./patches/</span></pre>
+        </div>
+      </div>
+
+      <h3 class="fade-in fade-in-2" style="margin:1rem 0 .6rem;color:var(--yellow)">Anatomía de un archivo .patch
+        (format-patch)</h3>
+      <div class="diff-vis fade-in fade-in-3" style="font-size:.8rem">
+        <div class="diff-vis-header">
+          <span class="diff-file">0001-Add-config-from-env.patch</span>
+          <span style="color:var(--muted);margin-left:auto">formato mbox</span>
+        </div>
+        <div class="diff-line" style="padding:.2rem 0">
+          <div class="diff-line-num" style="color:var(--accent3)">···</div>
+          <div class="diff-line-content" style="color:var(--accent3)">From 9c82e04 Mon Sep 17 00:00:00 2001</div>
+        </div>
+        <div class="diff-line" style="padding:.2rem 0">
+          <div class="diff-line-num" style="color:var(--accent3)">···</div>
+          <div class="diff-line-content" style="color:var(--accent3)">From: Ada Lovelace &lt;ada@example.com&gt;</div>
+        </div>
+        <div class="diff-line" style="padding:.2rem 0">
+          <div class="diff-line-num" style="color:var(--accent3)">···</div>
+          <div class="diff-line-content" style="color:var(--accent3)">Date: Fri, 17 Apr 2026 10:23:00 +0000</div>
+        </div>
+        <div class="diff-line" style="padding:.2rem 0">
+          <div class="diff-line-num" style="color:var(--yellow)">···</div>
+          <div class="diff-line-content" style="color:var(--yellow)">Subject: [PATCH] Add config from environment
+            variables</div>
+        </div>
+        <div class="diff-line" style="padding:.2rem 0;background:rgba(251,191,36,.05)">
+          <div class="diff-line-num" style="color:var(--yellow)">···</div>
+          <div class="diff-line-content" style="color:var(--yellow)">---</div>
+        </div>
+        <div class="diff-line diff-ctx" style="padding:.2rem 0">
+          <div class="diff-line-num">···</div>
+          <div class="diff-line-content"> server.js | 3 ++-</div>
+        </div>
+        <div class="diff-line diff-ctx" style="padding:.2rem 0">
+          <div class="diff-line-num">···</div>
+          <div class="diff-line-content"> 1 file changed, 2 insertions(+), 1 deletion(-)</div>
+        </div>
+        <div class="diff-line diff-hunk" style="padding:.2rem 0">
+          <div class="diff-line-num">···</div>
+          <div class="diff-line-content">@@ -1,4 +1,5 @@ const app = require('./app');</div>
+        </div>
+        <div class="diff-line diff-del" style="padding:.2rem 0">
+          <div class="diff-line-num">1</div>
+          <div class="diff-line-content">-const PORT = 3000;</div>
+        </div>
+        <div class="diff-line diff-add" style="padding:.2rem 0">
+          <div class="diff-line-num">1</div>
+          <div class="diff-line-content">+const PORT = process.env.PORT || 3000;</div>
+        </div>
+        <div class="diff-line" style="padding:.2rem 0">
+          <div class="diff-line-num" style="color:var(--muted)">···</div>
+          <div class="diff-line-content" style="color:var(--muted)">-- </div>
+        </div>
+        <div class="diff-line" style="padding:.2rem 0">
+          <div class="diff-line-num" style="color:var(--muted)">···</div>
+          <div class="diff-line-content" style="color:var(--muted)">2.44.0</div>
+        </div>
+      </div>
+
+      <div class="callout callout-warn fade-in fade-in-4" style="margin-top:.6rem">
+        <p><strong>git diff</strong> crea parches <em>simples</em> (solo cambios). <strong>git format-patch</strong>
+          incluye metadatos del commit (autor, fecha, mensaje) → ideal para compartir y aplicar con <code>git am</code>.
+        </p>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 6: APLICAR PATCHES ===== -->
+    <div class="slide" id="s6">
+      <div class="slide-header">
+        <span class="slide-num">06</span>
+        <span class="slide-tag">aplicar</span>
+      </div>
+      <h2 class="fade-in">Aplicar <span class="accent">Patches</span></h2>
+
+      <div class="cards cards-2 fade-in fade-in-1" style="margin-bottom:1rem">
+        <div class="card">
+          <div class="card-icon"><i class="bi bi-wrench-adjustable-circle"></i></div>
+          <h3>git apply</h3>
+          <p>Aplica el patch como <strong>cambios en el working tree</strong> (o stage). No crea commit. Ideal para
+            patches generados con <code>git diff</code>.</p>
+        </div>
+        <div class="card">
+          <div class="card-icon"><i class="bi bi-envelope-paper"></i></div>
+          <h3>git am</h3>
+          <p>Aplica patches en <strong>formato mbox</strong> (format-patch) creando commits con toda la metadata
+            original: autor, fecha, mensaje.</p>
+        </div>
+      </div>
+
+      <div class="tabs fade-in fade-in-2" id="apply-tabs">
+        <div class="tab active-tab" onclick="switchTab2('tapply')">git apply</div>
+        <div class="tab" onclick="switchTab2('tam')">git am</div>
+        <div class="tab" onclick="switchTab2('tconflict')">Conflictos</div>
+      </div>
+
+      <div id="tc2-tapply" class="tab-content active-tc fade-in">
+        <div class="steps">
+          <div class="step">
+            <div class="step-content">
+              <h3>Verificar antes de aplicar</h3>
+              <pre style="margin-top:.4rem">git apply --check cambios.patch</pre>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-content">
+              <h3>Aplicar al working tree</h3>
+              <pre style="margin-top:.4rem">git apply cambios.patch</pre>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-content">
+              <h3>Aplicar y añadir al stage</h3>
+              <pre style="margin-top:.4rem">git apply --index cambios.patch
+<span class="line-meta"># Equivalente a: git apply + git add</span></pre>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-content">
+              <h3>Revertir un patch aplicado</h3>
+              <pre style="margin-top:.4rem">git apply --reverse cambios.patch</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="tc2-tam" class="tab-content">
+        <div class="steps">
+          <div class="step">
+            <div class="step-content">
+              <h3>Aplicar un solo patch</h3>
+              <pre style="margin-top:.4rem">git am 0001-mi-feature.patch</pre>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-content">
+              <h3>Aplicar todos los patches de un directorio</h3>
+              <pre style="margin-top:.4rem">git am ./patches/*.patch</pre>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-content">
+              <h3>Aplicar con three-way merge (recomendado)</h3>
+              <pre style="margin-top:.4rem">git am -3 0001-feature.patch
+<span class="line-meta"># Intenta merge en conflictos en vez de fallar</span></pre>
+            </div>
+          </div>
+          <div class="step">
+            <div class="step-content">
+              <h3>Continuar tras resolver conflicto</h3>
+              <pre style="margin-top:.4rem">git am --continue   <span class="line-meta"># después de resolver</span>
+git am --skip        <span class="line-meta"># saltar este patch</span>
+git am --abort       <span class="line-meta"># cancelar todo</span></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="tc2-tconflict" class="tab-content">
+        <div class="callout callout-warn" style="margin-bottom:.8rem">
+          <p>Cuando un patch no aplica limpiamente, git te avisa: <code>error: patch failed</code> o marca conflictos
+            con <code>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</code></p>
+        </div>
+        <pre>
+<span class="line-meta"># 1. Intentar con three-way merge:</span>
+<span class="line-add">git apply -3 mi.patch</span>
+
+<span class="line-meta"># 2. Aplicar lo que se pueda, guardar rechazos en .rej:</span>
+<span class="line-add">git apply --reject mi.patch</span>
+<span class="line-meta"># → Crea archivos .rej con hunks fallidos</span>
+<span class="line-meta"># → Edita manualmente y aplica los .rej</span>
+
+<span class="line-meta"># 3. Forzar aplicación ignorando espacios:</span>
+<span class="line-add">git apply --whitespace=fix mi.patch</span>
+<span class="line-add">git apply --ignore-whitespace mi.patch</span>
+
+<span class="line-meta"># 4. Ajustar contexto reducido:</span>
+<span class="line-add">git apply -C1 mi.patch  </span><span class="line-meta"># solo 1 línea de contexto</span></pre>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 7: AVANZADO ===== -->
+    <div class="slide" id="s7">
+      <div class="slide-header">
+        <span class="slide-num">07</span>
+        <span class="slide-tag">avanzado</span>
+      </div>
+      <h2 class="fade-in">Técnicas <span class="accent3">Avanzadas</span></h2>
+
+      <div class="tabs fade-in fade-in-1" id="adv-tabs">
+        <div class="tab active-tab" onclick="switchTab3('t1')">Edit Hunk</div>
+        <div class="tab" onclick="switchTab3('t2')">Split</div>
+        <div class="tab" onclick="switchTab3('t3')">Stash -p</div>
+        <div class="tab" onclick="switchTab3('t4')">send-email</div>
+        <div class="tab" onclick="switchTab3('t5')">Flujo pro</div>
+      </div>
+
+      <div id="tc3-t1" class="tab-content active-tc">
+        <h3 style="margin-bottom:.6rem">Editar un hunk manualmente (<code>e</code> en git add -p)</h3>
+        <p style="font-size:.88rem;margin-bottom:.8rem">Cuando eliges <code>e</code>, git abre el hunk en tu editor.
+          Reglas para modificarlo:</p>
+        <pre>
+<span class="line-meta"># Hunk original en el editor:</span>
+@@ -5,7 +5,8 @@
+ linea de contexto
+<span class="line-del">-linea que se borrará</span>
+<span class="line-add">+linea que se añadirá</span>
+<span class="line-add">+otra línea nueva</span>
+ más contexto
+
+<span class="line-meta">══ REGLAS AL EDITAR ══</span>
+<span class="line-add">+  Para NO aplicar una línea -del: conviértela a contexto (quita el -)</span>
+<span class="line-add">+  Para NO aplicar una línea +add: elimina la línea completa del editor</span>
+<span class="line-meta">  ¡No cambies líneas de contexto ni el @@ header directamente!</span>
+<span class="line-meta">  Si borras una línea de contexto, ajusta el contador en @@</span></pre>
+        <div class="callout callout-tip">
+          <p>Este modo es poderoso para staging <em>sub-hunk</em>: cuando git no puede dividir automáticamente
+            (<code>s</code>), puedes editar manualmente qué partes del hunk van al stage.</p>
+        </div>
+      </div>
+
+      <div id="tc3-t2" class="tab-content">
+        <h3 style="margin-bottom:.6rem">Split de hunks (<code>s</code> en git add -p)</h3>
+        <div class="cards cards-2">
+          <div>
+            <p style="font-size:.85rem;margin-bottom:.6rem">Git divide un hunk solo si hay <strong>suficientes líneas de
+                contexto</strong> entre sub-cambios. Mínimo 1 línea sin modificar entre ellos.</p>
+            <pre style="font-size:.78rem">
+<span class="line-meta">Hunk grande (1 bloque):</span>
+@@ -3,12 +3,14 @@
+ ctx
+<span class="line-del">-cambio A</span>
+<span class="line-add">+nuevo A</span>
+ ctx
+ ctx               ← 2 líneas = divisible
+ ctx
+<span class="line-del">-cambio B</span>
+<span class="line-add">+nuevo B</span>
+ ctx</pre>
+          </div>
+          <div>
+            <pre style="font-size:.78rem">
+<span class="line-meta">Después de pulsar 's':</span>
+
+<span class="line-meta">═ Hunk 1/2 ═</span>
+@@ -3,6 +3,6 @@
+ ctx
+<span class="line-del">-cambio A</span>
+<span class="line-add">+nuevo A</span>
+ ctx
+
+<span class="line-meta">═ Hunk 2/2 ═</span>
+@@ -9,5 +9,5 @@
+ ctx
+<span class="line-del">-cambio B</span>
+<span class="line-add">+nuevo B</span>
+ ctx</pre>
+          </div>
+        </div>
+      </div>
+
+      <div id="tc3-t3" class="tab-content">
+        <h3 style="margin-bottom:.6rem">Stash selectivo por hunks</h3>
+        <pre>
+<span class="line-meta"># Guardar en stash solo hunks seleccionados</span>
+<span class="line-add">git stash push -p</span>
+<span class="line-meta"># Igual que add -p pero para stash</span>
+<span class="line-meta"># Útil para "esconder temporalmente" parte del trabajo</span>
+
+<span class="line-add">git stash push -p -m "WIP: solo debug code"</span>
+<span class="line-meta"># Con mensaje descriptivo</span>
+
+<span class="line-add">git stash show -p stash@{0}</span>
+<span class="line-meta"># Ver el diff del stash antes de aplicarlo</span>
+
+<span class="line-add">git stash apply stash@{0}</span>
+<span class="line-meta"># Aplicar stash sin eliminarlo de la lista</span></pre>
+        <div class="callout callout-info">
+          <p><code>git stash push -p</code> vs <code>git stash -p</code>: ambos funcionan en versiones modernas de git.
+            La sintaxis <code>push</code> es más explícita y recomendada.</p>
+        </div>
+      </div>
+
+      <div id="tc3-t4" class="tab-content">
+        <h3 style="margin-bottom:.6rem">Enviar patches por email (flujo Linux Kernel)</h3>
+        <div class="pipe-diagram">
+          <div class="pipe-row">
+            <div class="pipe-box" style="border-color:var(--accent3)">git format-patch</div>
+            <div class="pipe-arrow">→</div>
+            <div class="pipe-box">0001-*.patch</div>
+            <div class="pipe-arrow">→</div>
+            <div class="pipe-box" style="border-color:var(--accent2)">git send-email</div>
+            <div class="pipe-arrow">→</div>
+            <div class="pipe-box" style="border-color:var(--green)">Mantenedor</div>
+          </div>
+          <div class="pipe-row" style="margin-top:.5rem">
+            <div class="pipe-box" style="border-color:var(--green)">git am -3</div>
+            <div class="pipe-arrow">←</div>
+            <div class="pipe-box">Recibe email</div>
+            <div class="pipe-arrow">←</div>
+            <div class="pipe-box" style="border-color:var(--accent2)">Revisión</div>
+          </div>
+        </div>
+        <pre style="margin-top:.6rem;font-size:.78rem">
+<span class="line-meta"># Generar serie de patches con cover letter:</span>
+<span class="line-add">git format-patch -3 --cover-letter -o patches/</span>
+
+<span class="line-meta"># Enviar:</span>
+<span class="line-add">git send-email --to=maintainer@kernel.org patches/*.patch</span>
+
+<span class="line-meta"># Configurar antes de mandar correo a un destinatario cualquiera:</span>
+<span class="line-add">git config --global sendemail.smtpserver smtp.gmail.com</span>
+<span class="line-add">git config --global sendemail.smtpuser tu_correo@gmail.com</span>
+<span class="line-add">git config --global sendemail.smtppass tu_password</span>
+<span class="line-add">git config --global sendemail.smtpserverport 587</span>
+<span class="line-add">git config --global sendemail.smtpencryption tls</span></pre>
+      </div>
+
+      <div id="tc3-t5" class="tab-content">
+        <h3 style="margin-bottom:.6rem">Flujo profesional completo</h3>
+        <div class="flow" style="flex-direction:column;align-items:flex-start;gap:.5rem">
+          <div style="display:flex;align-items:center;gap:.8rem">
+            <div class="flow-box" style="border-color:var(--accent)">1. Codear</div>
+            <span style="color:var(--muted);font-size:.82rem">→ múltiples cambios mezclados</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:.8rem">
+            <div class="flow-box" style="border-color:var(--accent2)">2. git add -p</div>
+            <span style="color:var(--muted);font-size:.82rem">→ stage solo lo relevante por commit</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:.8rem">
+            <div class="flow-box" style="border-color:var(--accent3)">3. git commit</div>
+            <span style="color:var(--muted);font-size:.82rem">→ commit atómico, mensaje claro</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:.8rem">
+            <div class="flow-box" style="border-color:var(--green)">4. git format-patch</div>
+            <span style="color:var(--muted);font-size:.82rem">→ exportar para review / backup</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:.8rem">
+            <div class="flow-box" style="border-color:var(--yellow)">5. git apply --check</div>
+            <span style="color:var(--muted);font-size:.82rem">→ verificar en otro entorno</span>
+          </div>
+        </div>
+        <pre style="margin-top:.8rem;font-size:.8rem">
+<span class="line-meta"># Workflow completo en una sesión:</span>
+<span class="line-add">git add -p                        </span><span class="line-meta"># selecciona hunks</span>
+<span class="line-add">git diff --staged                 </span><span class="line-meta"># revisa qué vas a commitear</span>
+<span class="line-add">git commit -m "feat: add env config"</span>
+<span class="line-add">git format-patch -1 -o ./patches/ </span><span class="line-meta"># exporta patch</span>
+<span class="line-add">git apply --check ./patches/*.patch</span><span class="line-meta"># verifica portabilidad</span></pre>
+      </div>
+    </div>
+
+    <!-- ===== SLIDE 8: QUIZ ===== -->
+    <div class="slide" id="s8">
+      <div class="slide-header">
+        <span class="slide-num">08</span>
+        <span class="slide-tag">quiz</span>
+      </div>
+      <h2 class="fade-in">Quiz <span class="accent">Final</span></h2>
+      <div id="quiz-container" class="fade-in fade-in-1">
+        <div id="q1" class="quiz-block">
+          <p class="quiz-q">1. ¿Qué significa <code>@@ -12,7 +12,9 @@</code> en un hunk header?</p>
+          <div class="quiz-opts">
+            <div class="quiz-opt" onclick="answer(1,'a')"><span>A</span> Desde línea 12 del original hay 7 líneas; en el
+              resultado desde línea 12 hay 9 líneas</div>
+            <div class="quiz-opt" onclick="answer(1,'b')"><span>B</span> Se eliminan 12 líneas y se añaden 7 o 9 según
+              el caso</div>
+            <div class="quiz-opt" onclick="answer(1,'c')"><span>C</span> El archivo original tiene 12 líneas y el nuevo
+              tiene 9</div>
+          </div>
+          <div class="quiz-feedback" id="qf1"></div>
+        </div>
+        <div id="q2" class="quiz-block" style="margin-top:1.5rem">
+          <p class="quiz-q">2. ¿Cuál es la diferencia principal entre <code>git apply</code> y <code>git am</code>?</p>
+          <div class="quiz-opts">
+            <div class="quiz-opt" onclick="answer(2,'a')"><span>A</span> No hay diferencia, son alias</div>
+            <div class="quiz-opt" onclick="answer(2,'b')"><span>B</span> <code>git apply</code> aplica cambios sin
+              commit; <code>git am</code> aplica patches con metadata y crea commits</div>
+            <div class="quiz-opt" onclick="answer(2,'c')"><span>C</span> <code>git am</code> es solo para ramas,
+              <code>git apply</code> para tags</div>
+          </div>
+          <div class="quiz-feedback" id="qf2"></div>
+        </div>
+        <div id="q3" class="quiz-block" style="margin-top:1.5rem">
+          <p class="quiz-q">3. En <code>git add -p</code>, ¿qué tecla usas para dividir un hunk en partes más pequeñas?
+          </p>
+          <div class="quiz-opts">
+            <div class="quiz-opt" onclick="answer(3,'a')"><span>A</span> <code>d</code></div>
+            <div class="quiz-opt" onclick="answer(3,'b')"><span>B</span> <code>s</code></div>
+            <div class="quiz-opt" onclick="answer(3,'c')"><span>C</span> <code>x</code></div>
+          </div>
+          <div class="quiz-feedback" id="qf3"></div>
+        </div>
+      </div>
+      <div id="quiz-result" style="display:none;margin-top:1.5rem">
+        <div class="callout callout-tip">
+          <p id="quiz-result-text" style="font-size:1rem;font-weight:700"></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="slide" id="s9">
+      <div class="thanks-wrap">
+        <div class="slide-header">
+          <span class="slide-num">09</span>
+          <span class="slide-tag">cierre</span>
+        </div>
+        <h2 class="fade-in">Gracias por tu <span class="accent">atención</span></h2>
+        <p class="thanks-note fade-in fade-in-1">
+          Este material es de autoría de <strong id="thanks-teacher-name">Marco Mayta</strong> y fue desarrollado para
+          el curso de <strong>Git y GitHub para Data Science</strong>, con un enfoque práctico, reproducible y orientado
+          a proyectos reales.
+        </p>
+        <div class="thanks-panel fade-in fade-in-2">
+          <div class="identity-grid" style="max-width:none;margin-top:0;">
+            <div class="identity-card">
+              <div class="identity-media photo"><img id="thanks-teacher-photo" src="https://avatars.githubusercontent.com/u/271381047?v=4"
+                  alt="Foto de Marco Mayta"></div>
+              <div class="identity-copy">
+                <h3 id="thanks-teacher-name-card">Marco Mayta</h3>
+                <p id="thanks-teacher-desc">Docente e investigador en IA y ciencia de datos, Ingeniero Estadístico e
+                  Informático, candidato a MBA en IA & Big Data (USP), orientado a formación práctica basada en
+                  proyectos y problemas reales.</p>
+                <a class="identity-link" id="thanks-teacher-link"
+                  href="https://www.linkedin.com/in/marco-mayta-835781170/" target="_blank"
+                  rel="noopener noreferrer">LinkedIn personal</a>
+              </div>
+            </div>
+            <div class="identity-card">
+              <div class="identity-media logo"><img id="thanks-inst-logo" src="data:image/png;base64,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"
+                  alt="Logo del Instituto de Analítica y Negocios"></div>
+              <div class="identity-copy">
+                <h3 id="thanks-inst-name">Instituto de Analítica y Negocios</h3>
+                <p id="thanks-inst-desc">Formación técnica y profesional. Transformamos datos en inteligencia
+                  empresarial avanzada mediante Business Intelligence y Forecasting.</p>
+                <a class="identity-link" id="thanks-inst-link"
+                  href="https://www.linkedin.com/company/instituto-de-anal%C3%ADtica-y-negocios/" target="_blank"
+                  rel="noopener noreferrer">LinkedIn institución</a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /slides -->
+
+  <!-- PROGRESS -->
+  <div id="progress">
+    <div id="progress-fill"></div>
+  </div>
+
+  <!-- NAV -->
+  <div id="nav">
+    <button class="nav-btn" onclick="prev()">← Anterior</button>
+    <span id="slide-counter">1 / 10</span>
+    <button class="nav-btn" onclick="next()">Siguiente →</button>
+  </div>
+
+  <script>
+    // ========== SLIDE ENGINE ==========
+    let current = 0;
+    const total = 10;
+    function goTo(n) {
+      const old = document.getElementById('s' + current);
+      old.classList.remove('active');
+      old.classList.add('exit');
+      setTimeout(() => old.classList.remove('exit'), 500);
+      current = Math.max(0, Math.min(total - 1, n));
+      const nw = document.getElementById('s' + current);
+      nw.classList.add('active');
+      document.getElementById('slide-counter').textContent = (current + 1) + ' / ' + total;
+      document.getElementById('progress-fill').style.width = ((current / (total - 1)) * 100) + '%';
+    }
+    function next() { goTo(current + 1) }
+    function prev() { goTo(current - 1) }
+    document.addEventListener('keydown', e => {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') next();
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') prev();
+    });
+
+    // ========== PROFILE DATA ==========
+    function applyProfileData(data) {
+      const institution = data?.institution || {};
+      const teacher = data?.teacher || {};
+
+      const setText = (id, value) => {
+        const el = document.getElementById(id);
+        if (el && value) el.textContent = value;
+      };
+      const setHref = (id, value) => {
+        const el = document.getElementById(id);
+        if (el && value) el.href = value;
+      };
+      const setSrc = (id, value) => {
+        const el = document.getElementById(id);
+        if (el && value) el.src = value;
+      };
+
+      setSrc('cover-inst-logo', institution.logo);
+      setText('cover-inst-name', institution.name);
+      setText('cover-inst-desc', institution.description);
+      setHref('cover-inst-link', institution.linkedin);
+
+      setSrc('cover-teacher-photo', teacher.photo);
+      setText('cover-teacher-name', teacher.name);
+      setText('cover-teacher-desc', teacher.headline);
+      setHref('cover-teacher-link', teacher.linkedin);
+
+      setSrc('thanks-inst-logo', institution.logo);
+      setText('thanks-inst-name', institution.name);
+      setText('thanks-inst-desc', institution.description);
+      setHref('thanks-inst-link', institution.linkedin);
+
+      setText('thanks-teacher-name', teacher.name);
+      setSrc('thanks-teacher-photo', teacher.photo);
+      setText('thanks-teacher-name-card', teacher.name);
+      setText('thanks-teacher-desc', teacher.headline);
+      setHref('thanks-teacher-link', teacher.linkedin);
+    }
+
+    async function loadProfileData() {
+      try {
+        const response = await fetch('data data.json');
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        applyProfileData(data);
+      } catch (error) {
+        console.warn('No se pudo cargar data data.json. Usa un servidor local para que fetch funcione correctamente.', error);
+      }
+    }
+
+    // ========== TABS ==========
+    function switchTab(id) {
+      document.querySelectorAll('#cmd-tabs .tab').forEach(t => t.classList.remove('active-tab'));
+      document.querySelectorAll('#tc-diff,#tc-show,#tc-log,#tc-apply').forEach(t => t.classList.remove('active-tc'));
+      event.target.classList.add('active-tab');
+      document.getElementById('tc-' + id).classList.add('active-tc');
+    }
+    function switchTab2(id) {
+      document.querySelectorAll('#apply-tabs .tab').forEach(t => t.classList.remove('active-tab'));
+      document.querySelectorAll('#tc2-tapply,#tc2-tam,#tc2-tconflict').forEach(t => t.classList.remove('active-tc'));
+      event.target.classList.add('active-tab');
+      document.getElementById('tc2-' + id).classList.add('active-tc');
+    }
+    function switchTab3(id) {
+      document.querySelectorAll('#adv-tabs .tab').forEach(t => t.classList.remove('active-tab'));
+      ['t1', 't2', 't3', 't4', 't5'].forEach(t => document.getElementById('tc3-' + t).classList.remove('active-tc'));
+      event.target.classList.add('active-tab');
+      document.getElementById('tc3-' + id).classList.add('active-tc');
+    }
+
+    // ========== PATCH BUILDER ==========
+    const lines = [
+      { type: 'del', text: '-const PORT = 3000;' },
+      { type: 'add', text: '+const PORT = process.env.PORT || 3000;' },
+      { type: 'add', text: '+const HOST = process.env.HOST || \'localhost\';' },
+      { type: 'del', text: '-  console.log(\'started\');' },
+      { type: 'add', text: '+  logger.info(`Server at ${HOST}:${PORT}`);' },
+      { type: 'add', text: '+  metrics.track(\'server_start\');' },
+    ];
+    const staged = [true, true, true, true, true, true];
+
+    function toggleLine(i) {
+      staged[i] = !staged[i];
+      const el = document.getElementById('pb' + i);
+      el.classList.remove('selected-add', 'selected-del');
+      if (staged[i]) el.classList.add(lines[i].type === 'add' ? 'selected-add' : 'selected-del');
+      updatePreview();
+    }
+    function stageAll() { staged.fill(true); lines.forEach((_, i) => { const el = document.getElementById('pb' + i); el.classList.add(lines[i].type === 'add' ? 'selected-add' : 'selected-del'); }); updatePreview(); }
+    function stageNone() { staged.fill(false); lines.forEach((_, i) => { const el = document.getElementById('pb' + i); el.classList.remove('selected-add', 'selected-del'); }); updatePreview(); }
+    function updatePreview() {
+      const pre = document.getElementById('pb-preview');
+      const sel = lines.filter((_, i) => staged[i]);
+      if (!sel.length) { pre.innerHTML = '<span style="color:var(--muted)"># nada staged</span>'; return; }
+      let html = '';
+      sel.forEach(l => {
+        const cls = l.type === 'add' ? 'line-add' : 'line-del';
+        html += `<span class="${cls}">${l.text}</span>\n`;
+      });
+      const adds = sel.filter(l => l.type === 'add').length;
+      const dels = sel.filter(l => l.type === 'del').length;
+      html += `\n<span class="line-meta"># ${adds} adición(es), ${dels} eliminación(es)</span>`;
+      pre.innerHTML = html;
+    }
+    updatePreview();
+
+    // ========== QUIZ ==========
+    const answers = { 1: 'a', 2: 'b', 3: 'b' };
+    const explanations = {
+      1: 'Correcto. <code>-L,S</code> = línea de inicio, cantidad de líneas en el original. <code>+L,S</code> = en el resultado. El cambio de 7→9 indica que se agregaron 2 líneas netas.',
+      2: 'Correcto. <code>git apply</code> solo aplica el diff sin crear commit. <code>git am</code> aplica patches mbox (generados con format-patch) y preserva autor, fecha y mensaje del commit.',
+      3: 'Correcto. <code>s</code> = split. Funciona solo si hay líneas de contexto entre los cambios. Cuando no es posible, usa <code>e</code> para editar el hunk manualmente.'
+    };
+    const wrongs = {
+      1: '❌ Incorrecto. Los números indican posición y tamaño de la región, no cantidad de cambios.',
+      2: '❌ Incorrecto. Son comandos distintos con propósitos diferentes.',
+      3: '❌ Incorrecto. La tecla correcta es <code>s</code> (de split).'
+    };
+    let answered = {};
+    function answer(q, opt) {
+      if (answered[q]) return;
+      answered[q] = opt;
+      const opts = document.querySelectorAll(`#q${q} .quiz-opt`);
+      const letters = ['a', 'b', 'c'];
+      opts.forEach((el, i) => {
+        if (letters[i] === answers[q]) el.classList.add('correct');
+        else if (letters[i] === opt) el.classList.add('wrong');
+      });
+      const fb = document.getElementById('qf' + q);
+      const correct = opt === answers[q];
+      fb.style.background = correct ? 'rgba(34,197,94,.1)' : 'rgba(239,68,68,.1)';
+      fb.style.border = correct ? '1px solid rgba(34,197,94,.3)' : '1px solid rgba(239,68,68,.3)';
+      fb.style.borderRadius = '8px';
+      fb.style.padding = '.8rem 1rem';
+      fb.innerHTML = (correct ? explanations[q] : wrongs[q]);
+      fb.classList.add('show');
+      if (Object.keys(answered).length === 3) {
+        const score = Object.entries(answered).filter(([q, a]) => answers[q] === a).length;
+        const res = document.getElementById('quiz-result');
+        res.style.display = 'block';
+        const msgs = ['¡Sigue practicando! Revisa los conceptos básicos.', '¡Bien! Dominas algunos conceptos, sigue profundizando.', '¡Perfecto! Dominas hunks y patches como un pro.'];
+        document.getElementById('quiz-result-text').innerHTML = `Puntuación: ${score}/3 — ${msgs[score - 1] || msgs[0]}`;
+      }
+    }
+
+    // Init
+    document.getElementById('progress-fill').style.width = '0%';
+    loadProfileData();
+  </script>
+</body>
+
+</html>
